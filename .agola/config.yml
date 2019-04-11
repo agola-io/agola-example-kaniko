@@ -1,0 +1,98 @@
+version: v0
+
+## Just use one of the provided run definitions. The first one will just build
+## the image. The second one will also push the image to dockerhub
+
+runs:
+
+## This run will just build (without pushing) a go program and a docker image
+  - name: build image
+    tasks:
+      - name: build
+        runtime:
+          containers:
+            - image: golang:1.12-stretch
+        steps:
+          - clone:
+          - run:
+              name: build the program
+              command: go build .
+          # Copy the built binary and the Dockerfile to the workspace
+          - save_to_workspace:
+              contents:
+                - source_dir: .
+                  dest_dir: /bin/
+                  paths:
+                    - agola-example-kaniko
+                - source_dir: .
+                  dest_dir: /
+                  paths:
+                    - Dockerfile
+                    - .dockerignore
+      - name: build docker image
+        runtime:
+          containers:
+            - image: gcr.io/kaniko-project/executor:debug
+        shell: /busybox/sh
+        working_dir: /workspace
+        steps:
+          - restore_workspace:
+              dest_dir: .
+          - run: /kaniko/executor --no-push
+        depends:
+          - build
+
+
+## This run will build and push a go program and a docker image. It requires
+## that a secret and variable called `DOCKERAUTH` is defined inside the agola
+## project definition
+
+#  - name: build and push image to docker hub
+#    tasks:
+#      - name: build
+#        runtime:
+#          containers:
+#            - image: golang:1.12-stretch
+#        steps:
+#          - clone:
+#          - run:
+#              name: build the program
+#              command: go build .
+#          # Copy the built binary and the Dockerfile to the workspace
+#          - save_to_workspace:
+#              contents:
+#                - source_dir: .
+#                  dest_dir: /bin/
+#                  paths:
+#                    - agola-example-kaniko
+#                - source_dir: .
+#                  dest_dir: /
+#                  paths:
+#                    - Dockerfile
+#                    - .dockerignore
+#      - name: build docker image
+#        runtime:
+#          containers:
+#            - image: gcr.io/kaniko-project/executor:debug
+#        environment:
+#          DOCKERREGISTRY_URL: "https://index.docker.io/v1/"
+#          DOCKERAUTH:
+#            from_variable: dockerauth
+#        shell: /busybox/sh
+#        working_dir: /workspace
+#        steps:
+#          - restore_workspace:
+#              dest_dir: .
+#          - run:
+#              name: generate docker config
+#              command: |
+#                cat << EOF > /kaniko/.docker/config.json
+#                {
+#                  "auths": {
+#                    "$DOCKERREGISTRY_URL": { "auth" : "$DOCKERAUTH" }
+#                  }
+#                }
+#                EOF
+#          - run: /kaniko/executor --destination sgotti/test
+#        depends:
+#          - build
